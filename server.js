@@ -17,15 +17,7 @@ const TEAMS = {
 };
 
 let tournament = null;
-let notifications = [
-  { id: 1, text: "🔥 משחק גדול מתחיל היום", type: "big" },
-  { id: 2, text: "🏆 Brazil פייבוריטית", type: "champion" },
-  { id: 3, text: "⚠️ הפתעה אפשרית במשחקים", type: "warning" }
-];
 
-/**
- * ⚽ משחק
- */
 function match(a, b) {
   const A = TEAMS[a].power;
   const B = TEAMS[b].power;
@@ -37,30 +29,26 @@ function match(a, b) {
 
   return {
     winner: gA >= gB ? a : b,
-    gA,
-    gB
+    score: `${gA}-${gB}`
   };
 }
 
-/**
- * 🏆 טורניר מלא
- */
 function runTournament() {
   let teams = Object.keys(TEAMS);
-  let scorers = {};
 
   const rounds = {
     roundOf16: [],
     quarterFinal: [],
     semiFinal: [],
     final: [],
-    champion: null
+    champion: null,
+    scorers: {}
   };
 
   let round = 1;
 
   while (teams.length > 1) {
-    let next = [];
+    const next = [];
 
     for (let i = 0; i < teams.length; i += 2) {
       const a = teams[i];
@@ -70,15 +58,10 @@ function runTournament() {
 
       next.push(res.winner);
 
-      scorers[a] = (scorers[a] || 0) + res.gA;
-      scorers[b] = (scorers[b] || 0) + res.gB;
+      rounds.scorers[a] = (rounds.scorers[a] || 0) + Math.floor(Math.random() * 3);
+      rounds.scorers[b] = (rounds.scorers[b] || 0) + Math.floor(Math.random() * 2);
 
-      const obj = {
-        a,
-        b,
-        winner: res.winner,
-        score: `${res.gA}-${res.gB}`
-      };
+      const obj = { a, b, winner: res.winner, score: res.score };
 
       if (round === 1) rounds.roundOf16.push(obj);
       if (round === 2) rounds.quarterFinal.push(obj);
@@ -92,53 +75,37 @@ function runTournament() {
 
   rounds.champion = teams[0];
 
-  let best = null;
+  let top = null;
   let goals = 0;
 
-  for (let t in scorers) {
-    if (scorers[t] > goals) {
-      goals = scorers[t];
-      best = t;
+  for (let t in rounds.scorers) {
+    if (rounds.scorers[t] > goals) {
+      goals = rounds.scorers[t];
+      top = t;
     }
   }
 
-  return {
-    ...rounds,
-    topScorer: {
-      player: TEAMS[best]?.star || best,
-      goals
-    }
+  rounds.topScorer = {
+    player: TEAMS[top]?.star || top,
+    goals
   };
+
+  return rounds;
 }
 
 function ensure() {
   if (!tournament) tournament = runTournament();
 }
 
-/**
- * 🏠 health
- */
 app.get("/", (req, res) => {
-  res.send("WORLD CUP AI LIVE");
+  res.send("WORLD CUP AI STABLE");
 });
 
-/**
- * ⚽ matches
- */
-app.get("/matches", (req, res) => {
-  const list = Object.keys(TEAMS);
-  const matches = [];
-
-  for (let i = 0; i < list.length; i += 2) {
-    matches.push({ home: list[i], away: list[i + 1] });
-  }
-
-  res.json(matches);
+app.get("/bracket", (req, res) => {
+  ensure();
+  res.json(tournament);
 });
 
-/**
- * 🧠 predict
- */
 app.get("/predict/:a/:b", (req, res) => {
   const A = TEAMS[req.params.a].power;
   const B = TEAMS[req.params.b].power;
@@ -153,42 +120,17 @@ app.get("/predict/:a/:b", (req, res) => {
   });
 });
 
-/**
- * 🧠 insight
- */
 app.get("/insight/:team", (req, res) => {
   const t = req.params.team;
 
   res.json({
     team: t,
-    winChance: (TEAMS[t]?.power || 80) / 100,
-    reasons: ["כושר גבוה", "סגל חזק", "ניסיון בינלאומי"]
+    reasons: [
+      "כושר גבוה",
+      "סגל מאוזן",
+      "ניסיון בינלאומי"
+    ]
   });
 });
 
-/**
- * 🏆 bracket
- */
-app.get("/bracket", (req, res) => {
-  ensure();
-  res.json(tournament);
-});
-
-/**
- * 👑 top scorer
- */
-app.get("/top-scorer", (req, res) => {
-  ensure();
-  res.json(tournament.topScorer);
-});
-
-/**
- * 🔔 notifications
- */
-app.get("/notifications", (req, res) => {
-  res.json(notifications);
-});
-
-app.listen(PORT, () => {
-  console.log("SERVER RUNNING");
-});
+app.listen(PORT, () => console.log("RUNNING"));
