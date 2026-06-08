@@ -29,11 +29,12 @@ function match(a, b) {
 
   return {
     winner: gA >= gB ? a : b,
-    score: `${gA}-${gB}`
+    score: `${gA}-${gB}`,
+    p
   };
 }
 
-function runTournament() {
+function run() {
   let teams = Object.keys(TEAMS);
 
   const rounds = {
@@ -54,14 +55,14 @@ function runTournament() {
       const a = teams[i];
       const b = teams[i + 1];
 
-      const res = match(a, b);
+      const r = match(a, b);
 
-      next.push(res.winner);
+      next.push(r.winner);
 
       rounds.scorers[a] = (rounds.scorers[a] || 0) + Math.floor(Math.random() * 3);
       rounds.scorers[b] = (rounds.scorers[b] || 0) + Math.floor(Math.random() * 2);
 
-      const obj = { a, b, winner: res.winner, score: res.score };
+      const obj = { a, b, ...r };
 
       if (round === 1) rounds.roundOf16.push(obj);
       if (round === 2) rounds.quarterFinal.push(obj);
@@ -75,18 +76,18 @@ function runTournament() {
 
   rounds.champion = teams[0];
 
-  let top = null;
+  let best = null;
   let goals = 0;
 
   for (let t in rounds.scorers) {
     if (rounds.scorers[t] > goals) {
       goals = rounds.scorers[t];
-      top = t;
+      best = t;
     }
   }
 
   rounds.topScorer = {
-    player: TEAMS[top]?.star || top,
+    player: TEAMS[best]?.star,
     goals
   };
 
@@ -94,12 +95,8 @@ function runTournament() {
 }
 
 function ensure() {
-  if (!tournament) tournament = runTournament();
+  if (!tournament) tournament = run();
 }
-
-app.get("/", (req, res) => {
-  res.send("WORLD CUP AI STABLE");
-});
 
 app.get("/bracket", (req, res) => {
   ensure();
@@ -113,23 +110,9 @@ app.get("/predict/:a/:b", (req, res) => {
   const p = A / (A + B);
 
   res.json({
-    homeWin: Number(p.toFixed(2)),
-    awayWin: Number((1 - p).toFixed(2)),
-    draw: 0.15,
+    homeWin: p,
+    awayWin: 1 - p,
     expectedScore: `${Math.round(p * 3)}-${Math.round((1 - p) * 3)}`
-  });
-});
-
-app.get("/insight/:team", (req, res) => {
-  const t = req.params.team;
-
-  res.json({
-    team: t,
-    reasons: [
-      "כושר גבוה",
-      "סגל מאוזן",
-      "ניסיון בינלאומי"
-    ]
   });
 });
 
