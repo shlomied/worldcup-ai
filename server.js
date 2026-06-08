@@ -3,9 +3,6 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 
-/**
- * 🏆 נבחרות
- */
 const TEAMS = {
   Brazil: 92,
   Germany: 88,
@@ -17,15 +14,12 @@ const TEAMS = {
   Netherlands: 84
 };
 
-/**
- * 📊 מצב טורניר שמור (לא משתנה כל רענון)
- */
 let tournament = null;
 
 /**
- * ⚽ חישוב משחק
+ * ⚽ משחק
  */
-function playMatch(a, b) {
+function match(a, b) {
   const aP = TEAMS[a];
   const bP = TEAMS[b];
 
@@ -42,7 +36,7 @@ function playMatch(a, b) {
 }
 
 /**
- * 🏆 סימולציה מלאה (פעם אחת בלבד)
+ * 🏆 טורניר מלא
  */
 function runTournament() {
   let teams = Object.keys(TEAMS);
@@ -55,48 +49,36 @@ function runTournament() {
       const a = teams[i];
       const b = teams[i + 1];
 
-      const match = playMatch(a, b);
+      const res = match(a, b);
 
-      next.push(match.winner);
+      next.push(res.winner);
 
-      scorers[a] = (scorers[a] || 0) + match.goalsA;
-      scorers[b] = (scorers[b] || 0) + match.goalsB;
+      scorers[a] = (scorers[a] || 0) + res.goalsA;
+      scorers[b] = (scorers[b] || 0) + res.goalsB;
     }
 
     teams = next;
   }
 
-  const champion = teams[0];
-
-  let topScorer = Object.keys(scorers).reduce((a, b) =>
-    scorers[a] > scorers[b] ? a : b
-  );
-
   return {
-    champion,
-    topScorer,
+    champion: teams[0],
     scorers
   };
 }
 
-/**
- * 🔒 יצירת טורניר יציב
- */
-function ensureTournament() {
-  if (!tournament) {
-    tournament = runTournament();
-  }
+function ensure() {
+  if (!tournament) tournament = runTournament();
 }
 
 /**
- * 🏠 בדיקה
+ * 🏠 health
  */
 app.get("/", (req, res) => {
-  res.send("⚽ World Cup AI V2 is LIVE");
+  res.send("WORLD CUP AI V3 LIVE");
 });
 
 /**
- * ⚽ משחקים
+ * ⚽ matches
  */
 app.get("/matches", (req, res) => {
   res.json([
@@ -111,60 +93,73 @@ app.get("/matches", (req, res) => {
 });
 
 /**
- * 🧠 חיזוי
+ * 🧠 predict
  */
-app.get("/predict/:home/:away", (req, res) => {
-  const { home, away } = req.params;
+app.get("/predict/:h/:a", (req, res) => {
+  const h = TEAMS[req.params.h] || 80;
+  const a = TEAMS[req.params.a] || 80;
 
-  const homeP = TEAMS[home] || 80;
-  const awayP = TEAMS[away] || 80;
-
-  const homeWin = homeP / (homeP + awayP);
+  const p = h / (h + a);
 
   res.json({
-    homeWin: Number(homeWin.toFixed(2)),
-    awayWin: Number((1 - homeWin).toFixed(2)),
+    homeWin: Number(p.toFixed(2)),
+    awayWin: Number((1 - p).toFixed(2)),
     draw: 0.15,
-    expectedScore: `${Math.round(homeWin * 3)}-${Math.round((1 - homeWin) * 3)}`,
+    expectedScore: `${Math.round(p * 3)}-${Math.round((1 - p) * 3)}`,
     confidence: 0.75
   });
 });
 
 /**
- * 🏆 אלופה (יציבה)
+ * 🏆 champion
  */
 app.get("/champion", (req, res) => {
-  ensureTournament();
+  ensure();
   res.json({ champion: tournament.champion });
 });
 
 /**
- * 👑 מלך שערים (יציב)
+ * 👑 top scorer
  */
 app.get("/top-scorer", (req, res) => {
-  ensureTournament();
+  ensure();
 
-  const scorers = tournament.scorers;
+  const s = tournament.scorers;
 
-  let best = null;
-  let goals = 0;
+  let best = "";
+  let g = 0;
 
-  for (let t in scorers) {
-    if (scorers[t] > goals) {
-      best = t;
-      goals = scorers[t];
+  for (let k in s) {
+    if (s[k] > g) {
+      g = s[k];
+      best = k;
     }
   }
 
-  res.json({
-    player: best,
-    goals
-  });
+  res.json({ player: best, goals: g });
 });
 
 /**
- * 🚀 הפעלה
+ * 🧠 AI insight (למה ינצחו)
  */
-app.listen(PORT, () => {
-  console.log("World Cup AI V2 running on port " + PORT);
+app.get("/insight/:team", (req, res) => {
+  const t = req.params.team;
+  const p = TEAMS[t] || 80;
+
+  const reasons = [
+    "התקפה חזקה",
+    "הגנה יציבה",
+    "ניסיון בטורנירים גדולים",
+    "כושר משחק גבוה",
+    "מאזן ניצחונות טוב"
+  ];
+
+  res.json({
+    team: t,
+    power: p,
+    winChance: Number((p / 100).toFixed(2)),
+    reasons: reasons.sort(() => 0.5 - Math.random()).slice(0, 3)
+  });
 });
+
+app.listen(PORT, () => console.log("V3 LIVE"));
