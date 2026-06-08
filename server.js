@@ -3,6 +3,91 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 
+// 🏆 טורניר מונדיאל קבוע
+const WORLD_CUP = [
+  ["Brazil", "Germany"],
+  ["France", "Spain"],
+  ["Argentina", "England"],
+  ["Portugal", "Netherlands"]
+];
+
+// 📅 מחזיר משחקים קבועים (מונדיאל בלבד)
+app.get("/matches", (req, res) => {
+  const matches = WORLD_CUP.map(m => ({
+    home: m[0],
+    away: m[1]
+  }));
+
+  res.json(matches);
+});
+
+// 🧠 חיזוי משחק
+function predictMatch(home, away) {
+
+  const homePower = Math.random();
+  const awayPower = Math.random();
+
+  const homeWin = homePower / (homePower + awayPower);
+  const awayWin = 1 - homeWin;
+  const draw = Math.random() * 0.2;
+
+  return {
+    homeWin,
+    draw,
+    awayWin
+  };
+}
+
+// ⚽ endpoint חיזוי
+app.get("/predict/:home/:away", (req, res) => {
+  const { home, away } = req.params;
+
+  const p = predictMatch(home, away);
+
+  res.json({
+    ...p,
+    expectedScore: `${Math.floor(p.homeWin * 3)}-${Math.floor(p.awayWin * 3)}`,
+    confidence: 0.6 + Math.random() * 0.3
+  });
+});
+
+// 🏆 סימולציית אלופה (פשוטה אבל חזקה)
+app.get("/champion", (req, res) => {
+
+  let teams = ["Brazil", "Germany", "France", "Spain", "Argentina", "England", "Portugal", "Netherlands"];
+
+  // סימולציה עד מנצח
+  while (teams.length > 1) {
+
+    let nextRound = [];
+
+    for (let i = 0; i < teams.length; i += 2) {
+
+      const home = teams[i];
+      const away = teams[i + 1];
+
+      const pHome = Math.random();
+
+      if (pHome > 0.5) nextRound.push(home);
+      else nextRound.push(away);
+    }
+
+    teams = nextRound;
+  }
+
+  res.json({
+    champion: teams[0]
+  });
+});
+
+app.listen(PORT, () => {
+  console.log("World Cup AI running on " + PORT);
+});
+const express = require("express");
+const app = express();
+
+const PORT = process.env.PORT || 10000;
+
 /**
  * 🏠 בדיקה שהשרת חי
  */
