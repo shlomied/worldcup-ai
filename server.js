@@ -5,39 +5,70 @@ const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
 
+// 🏟️ קבוצות
 const TEAMS = {
-  Brazil: { power: 92, star: "Neymar" },
-  Germany: { power: 88, star: "Musiala" },
-  France: { power: 91, star: "Mbappé" },
-  Spain: { power: 86, star: "Yamal" },
-  Argentina: { power: 90, star: "Messi" },
-  England: { power: 87, star: "Kane" },
-  Portugal: { power: 85, star: "Ronaldo" },
-  Netherlands: { power: 84, star: "de Jong" }
+  Brazil: { power: 92 },
+  Germany: { power: 88 },
+  France: { power: 91 },
+  Spain: { power: 86 },
+  Argentina: { power: 90 },
+  England: { power: 87 },
+  Portugal: { power: 85 },
+  Netherlands: { power: 84 }
 };
 
-let tournament = null;
+// 📈 כושר (מערכת חכמה)
+let form = {};
 
+// 🧠 win probability חכם
+function getWinProb(a, b) {
+  const fa = form[a] || 0;
+  const fb = form[b] || 0;
+
+  const A = TEAMS[a].power + fa;
+  const B = TEAMS[b].power + fb;
+
+  return A / (A + B);
+}
+
+// 🔄 עדכון כושר
+function updateForm(team, win) {
+  if (!form[team]) form[team] = 0;
+
+  form[team] += win ? 2 : -1;
+
+  if (form[team] > 10) form[team] = 10;
+  if (form[team] < -5) form[team] = -5;
+}
+
+// ⚽ משחק חכם
 function match(a, b) {
-  const A = TEAMS[a].power;
-  const B = TEAMS[b].power;
-
-  const p = A / (A + B);
+  const p = getWinProb(a, b);
 
   const gA = Math.round(Math.random() * 3 * p);
   const gB = Math.round(Math.random() * 3 * (1 - p));
 
+  const winner = gA >= gB ? a : b;
+
+  updateForm(a, winner === a);
+  updateForm(b, winner === b);
+
   return {
-    winner: gA >= gB ? a : b,
+    a,
+    b,
+    winner,
     score: `${gA}-${gB}`,
-    p
+    probability: p
   };
 }
 
-function run() {
+// 🏆 טורניר
+let tournament = null;
+
+function runTournament() {
   let teams = Object.keys(TEAMS);
 
-  const rounds = {
+  const result = {
     roundOf16: [],
     quarterFinal: [],
     semiFinal: [],
@@ -55,65 +86,81 @@ function run() {
       const a = teams[i];
       const b = teams[i + 1];
 
-      const r = match(a, b);
+      const res = match(a, b);
 
-      next.push(r.winner);
+      next.push(res.winner);
 
-      rounds.scorers[a] = (rounds.scorers[a] || 0) + Math.floor(Math.random() * 3);
-      rounds.scorers[b] = (rounds.scorers[b] || 0) + Math.floor(Math.random() * 2);
+      result.scorers[a] = (result.scorers[a] || 0) + Math.floor(Math.random() * 3);
+      result.scorers[b] = (result.scorers[b] || 0) + Math.floor(Math.random() * 2);
 
-      const obj = { a, b, ...r };
+      const obj = { ...res };
 
-      if (round === 1) rounds.roundOf16.push(obj);
-      if (round === 2) rounds.quarterFinal.push(obj);
-      if (round === 3) rounds.semiFinal.push(obj);
-      if (round === 4) rounds.final.push(obj);
+      if (round === 1) result.roundOf16.push(obj);
+      if (round === 2) result.quarterFinal.push(obj);
+      if (round === 3) result.semiFinal.push(obj);
+      if (round === 4) result.final.push(obj);
     }
 
     teams = next;
     round++;
   }
 
-  rounds.champion = teams[0];
+  result.champion = teams[0];
 
-  let best = null;
+  let top = null;
   let goals = 0;
 
-  for (let t in rounds.scorers) {
-    if (rounds.scorers[t] > goals) {
-      goals = rounds.scorers[t];
-      best = t;
+  for (let t in result.scorers) {
+    if (result.scorers[t] > goals) {
+      goals = result.scorers[t];
+      top = t;
     }
   }
 
-  rounds.topScorer = {
-    player: TEAMS[best]?.star,
+  result.topScorer = {
+    player: top,
     goals
   };
 
-  return rounds;
+  return result;
 }
 
 function ensure() {
-  if (!tournament) tournament = run();
+  if (!tournament) tournament = runTournament();
 }
 
+// 🏠 health
+app.get("/", (req, res) => {
+  res.send("WORLD CUP AI ULTIMATE");
+});
+
+// 🏆 bracket
 app.get("/bracket", (req, res) => {
   ensure();
   res.json(tournament);
 });
 
+// ⚽ predict
 app.get("/predict/:a/:b", (req, res) => {
-  const A = TEAMS[req.params.a].power;
-  const B = TEAMS[req.params.b].power;
-
-  const p = A / (A + B);
+  const p = getWinProb(req.params.a, req.params.b);
 
   res.json({
-    homeWin: p,
-    awayWin: 1 - p,
+    homeWin: Number(p.toFixed(2)),
+    awayWin: Number((1 - p).toFixed(2)),
     expectedScore: `${Math.round(p * 3)}-${Math.round((1 - p) * 3)}`
   });
 });
 
-app.listen(PORT, () => console.log("RUNNING"));
+// 🧠 insight
+app.get("/insight/:team", (req, res) => {
+  res.json({
+    team: req.params.team,
+    reasons: [
+      "כושר יציב",
+      "יכולת התקפית",
+      "איזון טקטי"
+    ]
+  });
+});
+
+app.listen(PORT, () => console.log("SERVER RUNNING"));
