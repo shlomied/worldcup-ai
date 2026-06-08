@@ -3,23 +3,29 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// חובה כדי לבדוק שהשרת חי
 app.get("/", (req, res) => {
-  res.send("⚽ World Cup AI is LIVE");
+  res.send("⚽ World Cup AI LIVE");
 });
 
-// API בדיקה
-app.get("/predict/Brazil/Germany", (req, res) => {
+// 🔥 API אמיתי גנרי
+app.get("/predict/:home/:away", (req, res) => {
+
+  const { home, away } = req.params;
+
+  // דמו חכם (אפשר לשדרג ל-AI אמיתי אחר כך)
+  const homeWin = Math.random() * 0.6 + 0.2;
+  const draw = Math.random() * 0.3;
+  const awayWin = Math.max(0, 1 - homeWin - draw);
+
   res.json({
-    homeWin: 0.55,
-    draw: 0.25,
-    awayWin: 0.20,
-    expectedScore: "2-1",
-    confidence: 0.62
+    homeWin,
+    draw,
+    awayWin,
+    expectedScore: `${Math.floor(homeWin * 3)}-${Math.floor(awayWin * 3)}`,
+    confidence: Math.random() * 0.3 + 0.6
   });
 });
 
-// חשוב מאוד ל-Render
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
