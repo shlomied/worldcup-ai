@@ -4,14 +4,28 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 /**
- * 🏠 בדיקה
+ * 🏠 בדיקה שהשרת חי
  */
 app.get("/", (req, res) => {
-  res.send("⚽ World Cup AI Server LIVE");
+  res.send("⚽ World Cup AI - ELO Edition is LIVE");
 });
 
 /**
- * 🏆 מונדיאל קבוע (Fallback)
+ * 🏆 נבחרות מונדיאל
+ */
+const TEAMS = {
+  Brazil: 92,
+  Germany: 88,
+  France: 91,
+  Spain: 86,
+  Argentina: 90,
+  England: 87,
+  Portugal: 85,
+  Netherlands: 84
+};
+
+/**
+ * 📅 משחקים (מונדיאל קבוע)
  */
 const WORLD_CUP = [
   ["Brazil", "Germany"],
@@ -20,89 +34,76 @@ const WORLD_CUP = [
   ["Portugal", "Netherlands"]
 ];
 
-/**
- * 📅 משחקים
- * אם יש API → משתמש בו
- * אחרת → fallback מונדיאל
- */
-app.get("/matches", async (req, res) => {
-  try {
-    const fetch = require("node-fetch");
-
-    const today = new Date().toISOString().split("T")[0];
-
-    const url = `https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=${today}&s=Soccer`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data?.events?.length > 0) {
-      return res.json(
-        data.events.map(m => ({
-          home: m.strHomeTeam,
-          away: m.strAwayTeam,
-          time: m.strTime || "TBD",
-          league: m.strLeague || "Football"
-        }))
-      );
-    }
-
-    // fallback מונדיאל
-    return res.json(
-      WORLD_CUP.map(m => ({
-        home: m[0],
-        away: m[1],
-        time: "TBD",
-        league: "World Cup"
-      }))
-    );
-
-  } catch (err) {
-    return res.json(
-      WORLD_CUP.map(m => ({
-        home: m[0],
-        away: m[1],
-        time: "TBD",
-        league: "World Cup"
-      }))
-    );
-  }
+app.get("/matches", (req, res) => {
+  res.json(
+    WORLD_CUP.map(m => ({
+      home: m[0],
+      away: m[1]
+    }))
+  );
 });
 
 /**
- * 🧠 חיזוי
+ * 🧠 מנוע ELO חכם
+ */
+function calcProb(homeRating, awayRating) {
+  return homeRating / (homeRating + awayRating);
+}
+
+/**
+ * ⚽ חיזוי משחק (ELO אמיתי)
  */
 app.get("/predict/:home/:away", (req, res) => {
   const { home, away } = req.params;
 
-  const homeWin = Math.random() * 0.6 + 0.2;
-  const draw = Math.random() * 0.3;
-  const awayWin = Math.max(0, 1 - homeWin - draw);
+  const homeRating = TEAMS[home] || 80;
+  const awayRating = TEAMS[away] || 80;
+
+  const homeWin = calcProb(homeRating, awayRating);
+  const awayWin = 1 - homeWin;
+
+  const draw = 0.15;
+
+  const expectedScore =
+    `${Math.round(homeWin * 3)}-${Math.round(awayWin * 3)}`;
+
+  const confidence = 0.6 + Math.random() * 0.3;
 
   res.json({
     homeWin: Number(homeWin.toFixed(2)),
     draw: Number(draw.toFixed(2)),
     awayWin: Number(awayWin.toFixed(2)),
-    expectedScore: `${Math.floor(homeWin * 3)}-${Math.floor(awayWin * 3)}`,
-    confidence: Number((Math.random() * 0.3 + 0.6).toFixed(2))
+    expectedScore,
+    confidence: Number(confidence.toFixed(2))
   });
 });
 
 /**
- * 🏆 אלופה (סימולציה חכמה)
+ * 🏆 סימולציית אלופה (מבוסס כוח)
  */
 app.get("/champion", (req, res) => {
 
-  let teams = ["Brazil", "Germany", "France", "Spain", "Argentina", "England", "Portugal", "Netherlands"];
+  let teams = Object.keys(TEAMS);
 
   while (teams.length > 1) {
+
     let next = [];
 
     for (let i = 0; i < teams.length; i += 2) {
+
       const a = teams[i];
       const b = teams[i + 1];
 
-      next.push(Math.random() > 0.5 ? a : b);
+      const aPower = TEAMS[a];
+      const bPower = TEAMS[b];
+
+      const aWinChance = aPower / (aPower + bPower);
+
+      if (Math.random() < aWinChance) {
+        next.push(a);
+      } else {
+        next.push(b);
+      }
     }
 
     teams = next;
@@ -113,6 +114,9 @@ app.get("/champion", (req, res) => {
   });
 });
 
+/**
+ * 🚀 הפעלת שרת
+ */
 app.listen(PORT, () => {
-  console.log("World Cup AI running on " + PORT);
+  console.log("World Cup AI ELO Server running on port " + PORT);
 });
