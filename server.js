@@ -3,6 +3,8 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 
+app.use(express.json());
+
 const TEAMS = {
   Brazil: { power: 92, star: "Neymar" },
   Germany: { power: 88, star: "Musiala" },
@@ -15,23 +17,28 @@ const TEAMS = {
 };
 
 let tournament = null;
+let notifications = [
+  { id: 1, text: "🔥 משחק גדול מתחיל היום", type: "big" },
+  { id: 2, text: "🏆 Brazil פייבוריטית", type: "champion" },
+  { id: 3, text: "⚠️ הפתעה אפשרית במשחקים", type: "warning" }
+];
 
 /**
  * ⚽ משחק
  */
-function play(a, b) {
-  const aP = TEAMS[a].power;
-  const bP = TEAMS[b].power;
+function match(a, b) {
+  const A = TEAMS[a].power;
+  const B = TEAMS[b].power;
 
-  const aChance = aP / (aP + bP);
+  const p = A / (A + B);
 
-  const goalsA = Math.round(Math.random() * 3 * aChance);
-  const goalsB = Math.round(Math.random() * 3 * (1 - aChance));
+  const gA = Math.round(Math.random() * 3 * p);
+  const gB = Math.round(Math.random() * 3 * (1 - p));
 
   return {
-    winner: goalsA >= goalsB ? a : b,
-    goalsA,
-    goalsB
+    winner: gA >= gB ? a : b,
+    gA,
+    gB
   };
 }
 
@@ -59,24 +66,24 @@ function runTournament() {
       const a = teams[i];
       const b = teams[i + 1];
 
-      const res = play(a, b);
+      const res = match(a, b);
 
       next.push(res.winner);
 
-      scorers[a] = (scorers[a] || 0) + res.goalsA;
-      scorers[b] = (scorers[b] || 0) + res.goalsB;
+      scorers[a] = (scorers[a] || 0) + res.gA;
+      scorers[b] = (scorers[b] || 0) + res.gB;
 
-      const matchObj = {
+      const obj = {
         a,
         b,
         winner: res.winner,
-        score: `${res.goalsA}-${res.goalsB}`
+        score: `${res.gA}-${res.gB}`
       };
 
-      if (round === 1) rounds.roundOf16.push(matchObj);
-      if (round === 2) rounds.quarterFinal.push(matchObj);
-      if (round === 3) rounds.semiFinal.push(matchObj);
-      if (round === 4) rounds.final.push(matchObj);
+      if (round === 1) rounds.roundOf16.push(obj);
+      if (round === 2) rounds.quarterFinal.push(obj);
+      if (round === 3) rounds.semiFinal.push(obj);
+      if (round === 4) rounds.final.push(obj);
     }
 
     teams = next;
@@ -85,22 +92,21 @@ function runTournament() {
 
   rounds.champion = teams[0];
 
-  let topPlayer = null;
-  let topGoals = 0;
+  let best = null;
+  let goals = 0;
 
   for (let t in scorers) {
-    if (scorers[t] > topGoals) {
-      topGoals = scorers[t];
-      topPlayer = t;
+    if (scorers[t] > goals) {
+      goals = scorers[t];
+      best = t;
     }
   }
 
   return {
     ...rounds,
-    scorers,
     topScorer: {
-      player: TEAMS[topPlayer]?.star || topPlayer,
-      goals: topGoals
+      player: TEAMS[best]?.star || best,
+      goals
     }
   };
 }
@@ -113,37 +119,50 @@ function ensure() {
  * 🏠 health
  */
 app.get("/", (req, res) => {
-  res.send("WORLD CUP AI FINAL V4");
+  res.send("WORLD CUP AI LIVE");
 });
 
 /**
  * ⚽ matches
  */
 app.get("/matches", (req, res) => {
-  res.json(Object.keys(TEAMS).map((t, i, arr) => {
-    if (i % 2 === 0) {
-      return {
-        home: arr[i],
-        away: arr[i + 1]
-      };
-    }
-  }).filter(Boolean));
+  const list = Object.keys(TEAMS);
+  const matches = [];
+
+  for (let i = 0; i < list.length; i += 2) {
+    matches.push({ home: list[i], away: list[i + 1] });
+  }
+
+  res.json(matches);
 });
 
 /**
  * 🧠 predict
  */
 app.get("/predict/:a/:b", (req, res) => {
-  const a = TEAMS[req.params.a].power;
-  const b = TEAMS[req.params.b].power;
+  const A = TEAMS[req.params.a].power;
+  const B = TEAMS[req.params.b].power;
 
-  const p = a / (a + b);
+  const p = A / (A + B);
 
   res.json({
     homeWin: Number(p.toFixed(2)),
     awayWin: Number((1 - p).toFixed(2)),
     draw: 0.15,
     expectedScore: `${Math.round(p * 3)}-${Math.round((1 - p) * 3)}`
+  });
+});
+
+/**
+ * 🧠 insight
+ */
+app.get("/insight/:team", (req, res) => {
+  const t = req.params.team;
+
+  res.json({
+    team: t,
+    winChance: (TEAMS[t]?.power || 80) / 100,
+    reasons: ["כושר גבוה", "סגל חזק", "ניסיון בינלאומי"]
   });
 });
 
@@ -156,14 +175,6 @@ app.get("/bracket", (req, res) => {
 });
 
 /**
- * 🏆 champion
- */
-app.get("/champion", (req, res) => {
-  ensure();
-  res.json({ champion: tournament.champion });
-});
-
-/**
  * 👑 top scorer
  */
 app.get("/top-scorer", (req, res) => {
@@ -172,21 +183,12 @@ app.get("/top-scorer", (req, res) => {
 });
 
 /**
- * 🧠 AI insight
+ * 🔔 notifications
  */
-app.get("/insight/:team", (req, res) => {
-  const t = req.params.team;
-  const p = TEAMS[t]?.power || 80;
-
-  res.json({
-    team: t,
-    winChance: p / 100,
-    reasons: [
-      "כושר משחק גבוה",
-      "ניסיון בינלאומי",
-      "סגל חזק"
-    ]
-  });
+app.get("/notifications", (req, res) => {
+  res.json(notifications);
 });
 
-app.listen(PORT, () => console.log("FINAL SERVER RUNNING"));
+app.listen(PORT, () => {
+  console.log("SERVER RUNNING");
+});
