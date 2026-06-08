@@ -1,85 +1,80 @@
 const express = require("express");
 const app = express();
-
 const PORT = process.env.PORT || 10000;
 
-app.use(express.json());
-
-// 🏟️ FIFA TEAMS + PLAYERS
+// 🏟️ דאטה קבועה (לא משתנה = יציבות)
 const TEAMS = {
-  Brazil: { power: 92, players: ["Neymar", "Vinicius"] },
-  Germany: { power: 88, players: ["Musiala", "Kimmich"] },
-  France: { power: 91, players: ["Mbappé", "Griezmann"] },
-  Spain: { power: 86, players: ["Yamal", "Pedri"] },
-  Argentina: { power: 90, players: ["Messi", "Alvarez"] },
-  England: { power: 87, players: ["Kane", "Saka"] },
-  Portugal: { power: 85, players: ["Ronaldo", "Leao"] },
-  Netherlands: { power: 84, players: ["de Jong", "Gakpo"] }
+  Brazil: ["Neymar", "Vinicius"],
+  Germany: ["Musiala", "Kimmich"],
+  France: ["Mbappé", "Griezmann"],
+  Spain: ["Yamal", "Pedri"],
+  Argentina: ["Messi", "Alvarez"],
+  England: ["Kane", "Saka"],
+  Portugal: ["Ronaldo", "Leao"],
+  Netherlands: ["de Jong", "Gakpo"]
 };
 
-// 📊 ELO / FORM / GOALS
+const POWER = {
+  Brazil: 92,
+  Germany: 88,
+  France: 91,
+  Spain: 86,
+  Argentina: 90,
+  England: 87,
+  Portugal: 85,
+  Netherlands: 84
+};
+
+// 📦 מצב קבוע של טורניר (לא נבנה מחדש כל פעם)
+let STATE = null;
+
+// 📊 סטטיסטיקה
+let goals = {};
 let form = {};
-let playerGoals = {};
 
-// 🎲 חיזוי חכם (לא קבוע!)
-function getProb(a, b) {
-  const fa = form[a] || 0;
-  const fb = form[b] || 0;
+// 🎲 חיזוי יציב + שונות אמיתית
+function probability(a, b) {
+  const baseA = POWER[a] + (form[a] || 0);
+  const baseB = POWER[b] + (form[b] || 0);
 
-  const A = TEAMS[a].power + fa;
-  const B = TEAMS[b].power + fb;
+  const noise = (Math.random() - 0.5) * 4;
 
-  const noise = (Math.random() - 0.5) * 5; // חשוב מאוד לשונות אמיתית
-
-  return (A + noise) / ((A + B) + Math.abs(noise));
+  return (baseA + noise) / (baseA + baseB + Math.abs(noise));
 }
 
-// ⚽ גול לשחקן אמיתי
-function goal(team) {
-  const players = TEAMS[team].players;
+// ⚽ גול לשחקן
+function addGoal(team) {
+  const players = TEAMS[team];
   const scorer = players[Math.floor(Math.random() * players.length)];
 
-  playerGoals[scorer] = (playerGoals[scorer] || 0) + 1;
+  goals[scorer] = (goals[scorer] || 0) + 1;
 }
 
-// ⚽ משחק אמיתי
-function match(a, b) {
+// ⚽ משחק
+function play(a, b) {
 
-  const p = getProb(a, b);
+  const p = probability(a, b);
 
   const gA = Math.round(Math.random() * 3 * p);
   const gB = Math.round(Math.random() * 3 * (1 - p));
 
   const winner = gA >= gB ? a : b;
 
-  // 📈 form משתנה לפי תוצאה
   form[a] = (form[a] || 0) + (winner === a ? 2 : -1);
   form[b] = (form[b] || 0) + (winner === b ? 2 : -1);
 
-  form[a] = Math.max(-5, Math.min(10, form[a]));
-  form[b] = Math.max(-5, Math.min(10, form[b]));
+  for (let i = 0; i < gA; i++) addGoal(a);
+  for (let i = 0; i < gB; i++) addGoal(b);
 
-  // ⚽ שערים
-  for (let i = 0; i < gA; i++) goal(a);
-  for (let i = 0; i < gB; i++) goal(b);
-
-  return {
-    a,
-    b,
-    winner,
-    score: `${gA}-${gB}`,
-    probability: Number(p.toFixed(2))
-  };
+  return { a, b, winner, score: `${gA}-${gB}`, probability: p };
 }
 
-// 🏆 טורניר (נשמר קבוע)
-let tournament = null;
-
-function runTournament() {
+// 🏆 בניית טורניר אחת בלבד (קבוע לכל החיים של השרת)
+function build() {
 
   let teams = Object.keys(TEAMS);
 
-  const t = {
+  const r = {
     roundOf16: [],
     quarterFinal: [],
     semiFinal: [],
@@ -96,67 +91,64 @@ function runTournament() {
       const a = teams[i];
       const b = teams[i + 1];
 
-      const r = match(a, b);
+      const res = play(a, b);
 
-      next.push(r.winner);
+      next.push(res.winner);
 
-      const obj = { ...r };
+      const obj = { ...res };
 
-      if (round === 1) t.roundOf16.push(obj);
-      if (round === 2) t.quarterFinal.push(obj);
-      if (round === 3) t.semiFinal.push(obj);
-      if (round === 4) t.final.push(obj);
+      if (round === 1) r.roundOf16.push(obj);
+      if (round === 2) r.quarterFinal.push(obj);
+      if (round === 3) r.semiFinal.push(obj);
+      if (round === 4) r.final.push(obj);
     }
 
     teams = next;
     round++;
   }
 
-  t.champion = teams[0];
+  r.champion = teams[0];
 
-  // 👑 מלך שערים אמיתי (שחקן)
+  // 👑 מלך שערים (שחקן בלבד)
   let top = null;
   let max = 0;
 
-  for (let p in playerGoals) {
-    if (playerGoals[p] > max) {
-      max = playerGoals[p];
+  for (let p in goals) {
+    if (goals[p] > max) {
+      max = goals[p];
       top = p;
     }
   }
 
-  t.topScorer = {
-    player: top,
-    goals: max
-  };
+  r.topScorer = { player: top, goals: max };
 
-  return t;
+  return r;
 }
 
-function ensure() {
-  if (!tournament) tournament = runTournament();
+// 🧠 init פעם אחת בלבד
+function init() {
+  if (!STATE) STATE = build();
 }
 
-// 🏠 health
-app.get("/", (req, res) => {
-  res.send("FIFA MODE SERVER LIVE");
-});
+// 🏠 API
+app.get("/", (req, res) => res.send("FINAL MODE ACTIVE"));
 
-// 🏆 bracket
 app.get("/bracket", (req, res) => {
-  ensure();
-  res.json(tournament);
+  init();
+  res.json(STATE);
 });
 
-// ⚽ חיזוי
 app.get("/predict/:a/:b", (req, res) => {
-  const p = getProb(req.params.a, req.params.b);
+  const a = req.params.a;
+  const b = req.params.b;
+
+  const p = probability(a, b);
 
   res.json({
-    homeWin: p,
-    awayWin: 1 - p,
+    homeWin: Number(p.toFixed(2)),
+    awayWin: Number((1 - p).toFixed(2)),
     expectedScore: `${Math.round(p * 3)}-${Math.round((1 - p) * 3)}`
   });
 });
 
-app.listen(PORT, () => console.log("FIFA MODE RUNNING"));
+app.listen(PORT, () => console.log("FINAL MODE RUNNING"));
