@@ -4,14 +4,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 /**
- * 🏠 בדיקה שהשרת חי
- */
-app.get("/", (req, res) => {
-  res.send("⚽ World Cup AI - ELO Edition is LIVE");
-});
-
-/**
- * 🏆 נבחרות מונדיאל
+ * 🏆 נבחרות + כוח
  */
 const TEAMS = {
   Brazil: 92,
@@ -25,65 +18,34 @@ const TEAMS = {
 };
 
 /**
- * 📅 משחקים (מונדיאל קבוע)
+ * 📊 מצב שמור (חשוב!)
  */
-const WORLD_CUP = [
-  ["Brazil", "Germany"],
-  ["France", "Spain"],
-  ["Argentina", "England"],
-  ["Portugal", "Netherlands"]
-];
-
-app.get("/matches", (req, res) => {
-  res.json(
-    WORLD_CUP.map(m => ({
-      home: m[0],
-      away: m[1]
-    }))
-  );
-});
+let tournamentResult = null;
 
 /**
- * 🧠 מנוע ELO חכם
+ * ⚽ סימולציית משחק
  */
-function calcProb(homeRating, awayRating) {
-  return homeRating / (homeRating + awayRating);
+function playMatch(a, b) {
+  const aPower = TEAMS[a];
+  const bPower = TEAMS[b];
+
+  const aChance = aPower / (aPower + bPower);
+
+  const goalsA = Math.round(Math.random() * 3 * aChance);
+  const goalsB = Math.round(Math.random() * 3 * (1 - aChance));
+
+  const winner = goalsA >= goalsB ? a : b;
+
+  return { winner, goalsA, goalsB };
 }
 
 /**
- * ⚽ חיזוי משחק (ELO אמיתי)
+ * 🏆 סימולציית טורניר מלאה (פעם אחת!)
  */
-app.get("/predict/:home/:away", (req, res) => {
-  const { home, away } = req.params;
-
-  const homeRating = TEAMS[home] || 80;
-  const awayRating = TEAMS[away] || 80;
-
-  const homeWin = calcProb(homeRating, awayRating);
-  const awayWin = 1 - homeWin;
-
-  const draw = 0.15;
-
-  const expectedScore =
-    `${Math.round(homeWin * 3)}-${Math.round(awayWin * 3)}`;
-
-  const confidence = 0.6 + Math.random() * 0.3;
-
-  res.json({
-    homeWin: Number(homeWin.toFixed(2)),
-    draw: Number(draw.toFixed(2)),
-    awayWin: Number(awayWin.toFixed(2)),
-    expectedScore,
-    confidence: Number(confidence.toFixed(2))
-  });
-});
-
-/**
- * 🏆 סימולציית אלופה (מבוסס כוח)
- */
-app.get("/champion", (req, res) => {
+function runTournament() {
 
   let teams = Object.keys(TEAMS);
+  let scorers = {};
 
   while (teams.length > 1) {
 
@@ -94,29 +56,96 @@ app.get("/champion", (req, res) => {
       const a = teams[i];
       const b = teams[i + 1];
 
-      const aPower = TEAMS[a];
-      const bPower = TEAMS[b];
+      const match = playMatch(a, b);
 
-      const aWinChance = aPower / (aPower + bPower);
+      next.push(match.winner);
 
-      if (Math.random() < aWinChance) {
-        next.push(a);
-      } else {
-        next.push(b);
-      }
+      // 👑 שערים למלך שערים
+      scorers[match.winner] = (scorers[match.winner] || 0) + match.goalsA;
+      scorers[b] = (scorers[b] || 0) + match.goalsB;
     }
 
     teams = next;
   }
 
+  const champion = teams[0];
+
+  // 👑 מלך שערים
+  let topScorer = Object.keys(scorers).reduce((a, b) =>
+    scorers[a] > scorers[b] ? a : b
+  );
+
+  return {
+    champion,
+    topScorer,
+    scorers
+  };
+}
+
+/**
+ * 🚀 יצירת טורניר פעם אחת בלבד
+ */
+function ensureTournament() {
+  if (!tournamentResult) {
+    tournamentResult = runTournament();
+  }
+}
+
+/**
+ * 🏠 אלופה (קבועה!)
+ */
+app.get("/champion", (req, res) => {
+  ensureTournament();
+  res.json({ champion: tournamentResult.champion });
+});
+
+/**
+ * 👑 מלך שערים
+ */
+app.get("/top-scorer", (req, res) => {
+  ensureTournament();
   res.json({
-    champion: teams[0]
+    player: tournamentResult.topScorer,
+    goals: tournamentResult.scorers[tournamentResult.topScorer]
   });
 });
 
 /**
- * 🚀 הפעלת שרת
+ * ⚽ חיזוי פר משחק (עדיין דינמי)
  */
+app.get("/predict/:home/:away", (req, res) => {
+  const { home, away } = req.params;
+
+  const homePower = TEAMS[home] || 80;
+  const awayPower = TEAMS[away] || 80;
+
+  const homeWin = homePower / (homePower + awayPower);
+  const awayWin = 1 - homeWin;
+
+  res.json({
+    homeWin,
+    awayWin,
+    draw: 0.15,
+    expectedScore: `${Math.round(homeWin * 3)}-${Math.round(awayWin * 3)}`,
+    confidence: 0.75
+  });
+});
+
+/**
+ * 📅 משחקים
+ */
+app.get("/matches", (req, res) => {
+  res.json([
+    ["Brazil", "Germany"],
+    ["France", "Spain"],
+    ["Argentina", "England"],
+    ["Portugal", "Netherlands"]
+  ].map(m => ({
+    home: m[0],
+    away: m[1]
+  })));
+});
+
 app.listen(PORT, () => {
-  console.log("World Cup AI ELO Server running on port " + PORT);
+  console.log("World Cup AI stable running on " + PORT);
 });
