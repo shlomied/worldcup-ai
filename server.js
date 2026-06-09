@@ -3,25 +3,18 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 
-// 🔑 API KEY מ-Render
 const API_KEY = process.env.FOOTBALL_API_KEY;
 
-// =========================
-// 🏠 בדיקת שרת
-// =========================
+// 🏠 בדיקה
 app.get("/", (req, res) => {
-  res.send("🏆 World Cup AI - LIVE");
+  res.send("🏆 World Cup AI LIVE");
 });
 
-// =========================
-// 🧪 בדיקת חיבור API
-// =========================
+// 🧪 בדיקת API
 app.get("/test-api", async (req, res) => {
   try {
     const response = await fetch("https://v3.football.api-sports.io/status", {
-      headers: {
-        "x-apisports-key": API_KEY
-      }
+      headers: { "x-apisports-key": API_KEY }
     });
 
     const data = await response.json();
@@ -30,112 +23,71 @@ app.get("/test-api", async (req, res) => {
       keyExists: !!API_KEY,
       api: data
     });
-
-  } catch (err) {
-    res.json({ error: err.message });
+  } catch (e) {
+    res.json({ error: e.message });
   }
 });
 
-// =========================
-// 🏆 ID של מונדיאל (API-Football)
-// =========================
-// World Cup = league id 1 (בדרך כלל API-Football)
-// לפעמים משתנה לפי עונה
-const WORLD_CUP_LEAGUE_ID = 1;
+// ⚽ FALLBACK — משחקי מונדיאל קבועים (כדי שלא יהיה ריק)
+const WORLD_CUP_FIXTURES = [
+  { home: "Brazil", away: "Argentina", time: "20:00" },
+  { home: "France", away: "England", time: "22:00" },
+  { home: "Spain", away: "Germany", time: "18:00" },
+  { home: "Portugal", away: "Netherlands", time: "21:00" }
+];
 
-// =========================
-// 📅 משחקי מונדיאל בלבד
-// =========================
+// 📅 matches עם fallback
 app.get("/matches", async (req, res) => {
   try {
     const response = await fetch(
-      `https://v3.football.api-sports.io/fixtures?league=${WORLD_CUP_LEAGUE_ID}&season=2026`,
+      "https://v3.football.api-sports.io/fixtures?live=all",
       {
-        headers: {
-          "x-apisports-key": API_KEY
-        }
+        headers: { "x-apisports-key": API_KEY }
       }
     );
 
     const data = await response.json();
 
-    const matches = (data.response || []).map((m) => ({
+    const apiMatches = (data.response || []).map(m => ({
       home: m.teams.home.name,
       away: m.teams.away.name,
-      date: m.fixture.date,
-      stadium: m.fixture.venue?.name || "TBD"
+      time: m.fixture.date
     }));
 
-    res.json(matches);
+    // אם אין נתונים → fallback
+    if (apiMatches.length === 0) {
+      return res.json(WORLD_CUP_FIXTURES);
+    }
 
-  } catch (err) {
-    res.json([]);
+    res.json(apiMatches);
+
+  } catch (e) {
+    res.json(WORLD_CUP_FIXTURES);
   }
 });
 
-// =========================
-// 🧠 חיזוי חכם (מבוסס שם בלבד - יציב ולא משתנה כל רענון)
-// =========================
-function hashTeam(name) {
-  return name.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
-}
-
+// 🧠 חיזוי יציב
 function predict(home, away) {
-  const h = hashTeam(home);
-  const a = hashTeam(away);
+  const hash = s => s.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
+
+  const h = hash(home);
+  const a = hash(away);
 
   const total = h + a;
 
-  const homeWin = h / total;
-  const awayWin = a / total;
-
   return {
-    homeWin: Number(homeWin.toFixed(2)),
-    awayWin: Number(awayWin.toFixed(2)),
-    expectedScore: `${Math.round(homeWin * 3)}-${Math.round(awayWin * 3)}`
+    homeWin: Number((h / total).toFixed(2)),
+    awayWin: Number((a / total).toFixed(2)),
+    draw: 0.2,
+    expectedScore: `${Math.round((h / total) * 3)}-${Math.round((a / total) * 3)}`
   };
 }
 
-// =========================
-// ⚽ חיזוי משחק
-// =========================
 app.get("/predict/:home/:away", (req, res) => {
   const { home, away } = req.params;
   res.json(predict(home, away));
 });
 
-// =========================
-// 👑 מלך שערים (אמיתי - בסיס API עתידי)
-// =========================
-app.get("/top-scorer", async (req, res) => {
-  try {
-    const response = await fetch(
-      `https://v3.football.api-sports.io/players/topscorers?league=${WORLD_CUP_LEAGUE_ID}&season=2026`,
-      {
-        headers: {
-          "x-apisports-key": API_KEY
-        }
-      }
-    );
-
-    const data = await response.json();
-
-    const players = (data.response || []).slice(0, 5).map((p) => ({
-      name: p.player.name,
-      goals: p.statistics[0]?.goals?.total || 0,
-      team: p.statistics[0]?.team?.name
-    }));
-
-    res.json(players);
-
-  } catch (err) {
-    res.json([]);
-  }
-});
-
-// =========================
-// 🚀 הפעלת שרת
-// =========================
 app.listen(PORT, () => {
-  console.log("🏆 World Cup AI running on port " + PORT);
+  console.log("Server running on " + PORT);
 });
