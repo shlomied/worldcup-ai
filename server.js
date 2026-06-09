@@ -3,7 +3,8 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 const API_KEY = process.env.FOOTBALL_API_KEY;
-
+const FOOTBALL_DATA_KEY = process.env.FOOTBALL_DATA_KEY;
+const ODDS_API_KEY = process.env.ODDS_API_KEY;
 // =========================
 // 🧠 DATA LAYER — DEMO + FUTURE API READY
 // =========================
@@ -351,7 +352,85 @@ function simulateChampion() {
 // =========================
 // 🌍 FUTURE REAL API WRAPPER
 // =========================
+async function fetchFootballDataStatus() {
+  if (!FOOTBALL_DATA_KEY) {
+    return {
+      keyExists: false,
+      active: false,
+      reason: "Missing FOOTBALL_DATA_KEY"
+    };
+  }
 
+  try {
+    const response = await fetch("https://api.football-data.org/v4/competitions", {
+      headers: {
+        "X-Auth-Token": FOOTBALL_DATA_KEY
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        keyExists: true,
+        active: false,
+        reason: data?.message || `HTTP ${response.status}`,
+        sample: data
+      };
+    }
+
+    return {
+      keyExists: true,
+      active: true,
+      competitions: Array.isArray(data.competitions) ? data.competitions.length : 0
+    };
+  } catch (e) {
+    return {
+      keyExists: true,
+      active: false,
+      reason: e.message
+    };
+  }
+}
+
+async function fetchOddsApiStatus() {
+  if (!ODDS_API_KEY) {
+    return {
+      keyExists: false,
+      active: false,
+      reason: "Missing ODDS_API_KEY"
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_API_KEY}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        keyExists: true,
+        active: false,
+        reason: data?.message || `HTTP ${response.status}`,
+        sample: data
+      };
+    }
+
+    return {
+      keyExists: true,
+      active: true,
+      sports: Array.isArray(data) ? data.length : 0
+    };
+  } catch (e) {
+    return {
+      keyExists: true,
+      active: false,
+      reason: e.message
+    };
+  }
+}
 async function apiFootballStatus() {
   if (!API_KEY) {
     return {
@@ -412,12 +491,19 @@ app.get("/", (req, res) => {
 });
 
 app.get("/status", async (req, res) => {
-  const api = await apiFootballStatus();
+  const apiFootball = await apiFootballStatus();
+  const footballData = await fetchFootballDataStatus();
+  const oddsApi = await fetchOddsApiStatus();
+
+  const liveSources = [
+    apiFootball.active,
+    footballData.active,
+    oddsApi.active
+  ].filter(Boolean).length;
 
   res.json({
     server: true,
-
-    mode: api.active ? "LIVE_API" : "DEMO_FALLBACK",
+    mode: liveSources > 0 ? "HYBRID_LIVE" : "DEMO_FALLBACK",
 
     keys: {
       footballApi: !!process.env.FOOTBALL_API_KEY,
@@ -425,7 +511,12 @@ app.get("/status", async (req, res) => {
       oddsApi: !!process.env.ODDS_API_KEY
     },
 
-    apiFootball: api,
+    sources: {
+      apiFootball,
+      footballData,
+      oddsApi,
+      liveSources
+    },
 
     generatedAt: new Date().toISOString()
   });
