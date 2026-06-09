@@ -5,15 +5,21 @@ const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
 
-// 🔑 API KEY מ-Render (לא לכתוב בקוד!)
+// =====================
+// 🔑 API KEY מה-Render
+// =====================
 const API_KEY = process.env.FOOTBALL_API_KEY;
 
-// 🌍 בדיקת שרת
+// =====================
+// 🏠 בדיקת שרת
+// =====================
 app.get("/", (req, res) => {
-  res.send("⚽ World Cup AI LIVE SERVER");
+  res.send("⚽ World Cup AI LIVE");
 });
 
-// 🧪 בדיקת חיבור ל-API-Football
+// =====================
+// 🧪 בדיקת API KEY + חיבור
+// =====================
 app.get("/test-api", async (req, res) => {
   try {
     const response = await fetch("https://v3.football.api-sports.io/status", {
@@ -23,14 +29,19 @@ app.get("/test-api", async (req, res) => {
     });
 
     const data = await response.json();
-    res.json(data);
+    res.json({
+      keyExists: !!API_KEY,
+      apiResponse: data
+    });
 
   } catch (err) {
     res.json({ error: err.message });
   }
 });
 
-// 📅 משחקים אמיתיים (כרגע בסיס — אפשר לשפר לליגה/מונדיאל)
+// =====================
+// 📅 משחקים אמיתיים
+// =====================
 app.get("/matches", async (req, res) => {
   try {
     const response = await fetch(
@@ -57,39 +68,33 @@ app.get("/matches", async (req, res) => {
   }
 });
 
-// 🧠 חיזוי פשוט אבל יציב (לא רנדום קיצוני)
+// =====================
+// 🧠 חיזוי יציב (לא רנדום)
+// =====================
 function predict(home, away) {
-
   const hash = (str) =>
     str.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
 
   const h = hash(home);
   const a = hash(away);
 
-  const base = h / (h + a);
+  const homeWin = h / (h + a);
 
   return {
-    homeWin: Number(base.toFixed(2)),
-    awayWin: Number((1 - base).toFixed(2)),
-    expectedScore: `${Math.round(base * 3)}-${Math.round((1 - base) * 3)}`
+    homeWin: Number(homeWin.toFixed(2)),
+    awayWin: Number((1 - homeWin).toFixed(2)),
+    expectedScore: `${Math.round(homeWin * 3)}-${Math.round((1 - homeWin) * 3)}`
   };
 }
 
-// ⚽ חיזוי משחק
 app.get("/predict/:home/:away", (req, res) => {
   const { home, away } = req.params;
   res.json(predict(home, away));
 });
 
-// 🏆 מלך שערים (placeholder אמיתי עתידי)
-app.get("/top-scorer", (req, res) => {
-  res.json({
-    player: "Loading from API...",
-    goals: 0
-  });
-});
-
+// =====================
 // 🚀 הפעלה
+// =====================
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
