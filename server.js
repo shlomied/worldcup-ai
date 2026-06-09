@@ -1,154 +1,95 @@
 const express = require("express");
 const app = express();
+
 const PORT = process.env.PORT || 10000;
 
-// 🏟️ דאטה קבועה (לא משתנה = יציבות)
-const TEAMS = {
-  Brazil: ["Neymar", "Vinicius"],
-  Germany: ["Musiala", "Kimmich"],
-  France: ["Mbappé", "Griezmann"],
-  Spain: ["Yamal", "Pedri"],
-  Argentina: ["Messi", "Alvarez"],
-  England: ["Kane", "Saka"],
-  Portugal: ["Ronaldo", "Leao"],
-  Netherlands: ["de Jong", "Gakpo"]
-};
+app.use(express.json());
 
-const POWER = {
-  Brazil: 92,
-  Germany: 88,
-  France: 91,
-  Spain: 86,
-  Argentina: 90,
-  England: 87,
-  Portugal: 85,
-  Netherlands: 84
-};
+// 🔑 API KEY מ-Render (לא לכתוב בקוד!)
+const API_KEY = process.env.FOOTBALL_API_KEY;
 
-// 📦 מצב קבוע של טורניר (לא נבנה מחדש כל פעם)
-let STATE = null;
-
-// 📊 סטטיסטיקה
-let goals = {};
-let form = {};
-
-// 🎲 חיזוי יציב + שונות אמיתית
-function probability(a, b) {
-  const baseA = POWER[a] + (form[a] || 0);
-  const baseB = POWER[b] + (form[b] || 0);
-
-  const noise = (Math.random() - 0.5) * 4;
-
-  return (baseA + noise) / (baseA + baseB + Math.abs(noise));
-}
-
-// ⚽ גול לשחקן
-function addGoal(team) {
-  const players = TEAMS[team];
-  const scorer = players[Math.floor(Math.random() * players.length)];
-
-  goals[scorer] = (goals[scorer] || 0) + 1;
-}
-
-// ⚽ משחק
-function play(a, b) {
-
-  const p = probability(a, b);
-
-  const gA = Math.round(Math.random() * 3 * p);
-  const gB = Math.round(Math.random() * 3 * (1 - p));
-
-  const winner = gA >= gB ? a : b;
-
-  form[a] = (form[a] || 0) + (winner === a ? 2 : -1);
-  form[b] = (form[b] || 0) + (winner === b ? 2 : -1);
-
-  for (let i = 0; i < gA; i++) addGoal(a);
-  for (let i = 0; i < gB; i++) addGoal(b);
-
-  return { a, b, winner, score: `${gA}-${gB}`, probability: p };
-}
-
-// 🏆 בניית טורניר אחת בלבד (קבוע לכל החיים של השרת)
-function build() {
-
-  let teams = Object.keys(TEAMS);
-
-  const r = {
-    roundOf16: [],
-    quarterFinal: [],
-    semiFinal: [],
-    final: [],
-    champion: null
-  };
-
-  let round = 1;
-
-  while (teams.length > 1) {
-    const next = [];
-
-    for (let i = 0; i < teams.length; i += 2) {
-      const a = teams[i];
-      const b = teams[i + 1];
-
-      const res = play(a, b);
-
-      next.push(res.winner);
-
-      const obj = { ...res };
-
-      if (round === 1) r.roundOf16.push(obj);
-      if (round === 2) r.quarterFinal.push(obj);
-      if (round === 3) r.semiFinal.push(obj);
-      if (round === 4) r.final.push(obj);
-    }
-
-    teams = next;
-    round++;
-  }
-
-  r.champion = teams[0];
-
-  // 👑 מלך שערים (שחקן בלבד)
-  let top = null;
-  let max = 0;
-
-  for (let p in goals) {
-    if (goals[p] > max) {
-      max = goals[p];
-      top = p;
-    }
-  }
-
-  r.topScorer = { player: top, goals: max };
-
-  return r;
-}
-
-// 🧠 init פעם אחת בלבד
-function init() {
-  if (!STATE) STATE = build();
-}
-
-// 🏠 API
-app.get("/", (req, res) => res.send("FINAL MODE ACTIVE"));
-
-app.get("/bracket", (req, res) => {
-  init();
-  res.json(STATE);
+// 🌍 בדיקת שרת
+app.get("/", (req, res) => {
+  res.send("⚽ World Cup AI LIVE SERVER");
 });
 
-app.get("/predict/:a/:b", (req, res) => {
-  const a = req.params.a;
-  const b = req.params.b;
+// 🧪 בדיקת חיבור ל-API-Football
+app.get("/test-api", async (req, res) => {
+  try {
+    const response = await fetch("https://v3.football.api-sports.io/status", {
+      headers: {
+        "x-apisports-key": API_KEY
+      }
+    });
 
-  const p = probability(a, b);
+    const data = await response.json();
+    res.json(data);
 
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
+// 📅 משחקים אמיתיים (כרגע בסיס — אפשר לשפר לליגה/מונדיאל)
+app.get("/matches", async (req, res) => {
+  try {
+    const response = await fetch(
+      "https://v3.football.api-sports.io/fixtures?live=all",
+      {
+        headers: {
+          "x-apisports-key": API_KEY
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    const matches = (data.response || []).slice(0, 10).map((m) => ({
+      home: m.teams.home.name,
+      away: m.teams.away.name,
+      time: m.fixture.date
+    }));
+
+    res.json(matches);
+
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+// 🧠 חיזוי פשוט אבל יציב (לא רנדום קיצוני)
+function predict(home, away) {
+
+  const hash = (str) =>
+    str.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
+
+  const h = hash(home);
+  const a = hash(away);
+
+  const base = h / (h + a);
+
+  return {
+    homeWin: Number(base.toFixed(2)),
+    awayWin: Number((1 - base).toFixed(2)),
+    expectedScore: `${Math.round(base * 3)}-${Math.round((1 - base) * 3)}`
+  };
+}
+
+// ⚽ חיזוי משחק
+app.get("/predict/:home/:away", (req, res) => {
+  const { home, away } = req.params;
+  res.json(predict(home, away));
+});
+
+// 🏆 מלך שערים (placeholder אמיתי עתידי)
+app.get("/top-scorer", (req, res) => {
   res.json({
-    homeWin: Number(p.toFixed(2)),
-    awayWin: Number((1 - p).toFixed(2)),
-    expectedScore: `${Math.round(p * 3)}-${Math.round((1 - p) * 3)}`
+    player: "Loading from API...",
+    goals: 0
   });
 });
 
-app.listen(PORT, () => console.log("FINAL MODE RUNNING"));
+// 🚀 הפעלה
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
+});
