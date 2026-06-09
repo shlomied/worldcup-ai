@@ -102,7 +102,7 @@ app.get("/predict/:home/:away", (req, res) => {
 app.get("/top-scorer", async (req, res) => {
   try {
     const response = await fetch(
-      "https://v3.football.api-sports.io/players/topscorers?season=2026",
+      "https://v3.football.api-sports.io/players/topscorers?league=1&season=2026",
       {
         headers: { "x-apisports-key": API_KEY }
       }
@@ -113,18 +113,41 @@ app.get("/top-scorer", async (req, res) => {
     const players = (data.response || []).slice(0, 5).map(p => ({
       name: p.player.name,
       goals: p.statistics?.[0]?.goals?.total || 0,
-      team: p.statistics?.[0]?.team?.name || "Unknown"
+      predictedGoals: 5 + Math.floor(Math.random() * 3),
+      team: p.statistics?.[0]?.team?.name || "Unknown",
+      image: p.player.photo || null
     }));
 
-    if (!players.length) {
-      return res.json([
-        { name: "Loading...", goals: 0, team: "-" }
-      ]);
+    if (players.length > 0) {
+      return res.json(players);
     }
 
-    res.json(players);
+    throw new Error("No API scorer data");
+
   } catch (e) {
-    res.json([{ name: "Unavailable", goals: 0, team: "-" }]);
+    res.json([
+      {
+        name: "Kylian Mbappé",
+        team: "France",
+        goals: 0,
+        predictedGoals: 6,
+        image: "https://media.api-sports.io/football/players/278.png"
+      },
+      {
+        name: "Harry Kane",
+        team: "England",
+        goals: 0,
+        predictedGoals: 5,
+        image: "https://media.api-sports.io/football/players/184.png"
+      },
+      {
+        name: "Vinicius Jr",
+        team: "Brazil",
+        goals: 0,
+        predictedGoals: 5,
+        image: "https://media.api-sports.io/football/players/762.png"
+      }
+    ]);
   }
 });
 
