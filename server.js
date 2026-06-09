@@ -416,21 +416,18 @@ app.get("/status", async (req, res) => {
 
   res.json({
     server: true,
+
     mode: api.active ? "LIVE_API" : "DEMO_FALLBACK",
+
+    keys: {
+      footballApi: !!process.env.FOOTBALL_API_KEY,
+      footballData: !!process.env.FOOTBALL_DATA_KEY,
+      oddsApi: !!process.env.ODDS_API_KEY
+    },
+
     apiFootball: api,
+
     generatedAt: new Date().toISOString()
-  });
-});
-
-app.get("/test-api", async (req, res) => {
-  const api = await apiFootballStatus();
-
-  res.json({
-    keyExists: api.keyExists,
-    status: api.raw || {
-      errors: api.reason,
-      active: api.active
-    }
   });
 });
 
