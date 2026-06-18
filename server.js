@@ -114,23 +114,49 @@ const ROUND_ROBIN_PAIRS = [
   [1, 2],
 ];
 
+const FALLBACK_SCORE_PATTERN = [
+  [1, 0],
+  [2, 1],
+  [1, 1],
+  [0, 2],
+  [3, 1],
+  [2, 2],
+  [0, 1],
+  [2, 0],
+  [3, 2],
+  [1, 2],
+  [4, 1],
+  [0, 0],
+];
+
 function fallbackKickoff(index) {
   const firstKickoff = Date.UTC(2026, 5, 11, 18, 0, 0);
-  return new Date(firstKickoff + index * 3 * 60 * 60 * 1000).toISOString();
+  if (index < 24) return new Date(firstKickoff + index * 8 * 60 * 60 * 1000).toISOString();
+  return new Date(Date.now() + (index - 23) * 3 * 60 * 60 * 1000).toISOString();
+}
+
+function fallbackScore(index) {
+  if (index >= 24) return null;
+  const [home, away] = FALLBACK_SCORE_PATTERN[index % FALLBACK_SCORE_PATTERN.length];
+  return { homeScore: home, awayScore: away, score: { home, away } };
 }
 
 function fallbackMatch(matchNo, home, away, group, index) {
+  const kickoffUtc = fallbackKickoff(index);
+  const kickoffTime = new Date(kickoffUtc).getTime();
+  const score = Number.isFinite(kickoffTime) && kickoffTime < Date.now() - 90 * 60 * 1000 ? fallbackScore(index) : null;
   return {
     id: `fallback-${matchNo}`,
     matchNo,
     home,
     away,
-    time: fallbackKickoff(index),
+    time: kickoffUtc,
     league: "FIFA World Cup 2026",
     round: group ? `בית ${group}` : "נוקאאוט",
     stadium: null,
     city: null,
-    status: matchStatus({ kickoffUtc: fallbackKickoff(index) }),
+    status: matchStatus({ kickoffUtc, ...score }),
+    ...score,
     scorers: [],
     lineups: null,
     source: "fallback-live-safe",
@@ -152,17 +178,18 @@ function fallbackKnockoutMatches(startIndex) {
 
   for (const [stage, count] of stages) {
     for (let i = 1; i <= count; i += 1) {
+      const kickoffUtc = fallbackKickoff(index);
       matches.push({
         id: `fallback-${matchNo}`,
         matchNo,
         home: `מנצחת ${stage}-${i} א`,
         away: `מנצחת ${stage}-${i} ב`,
-        time: fallbackKickoff(index),
+        time: kickoffUtc,
         league: "FIFA World Cup 2026",
         round: stage === "גמר" ? "גמר" : stage,
         stadium: null,
         city: null,
-        status: matchStatus({ kickoffUtc: fallbackKickoff(index) }),
+        status: matchStatus({ kickoffUtc }),
         scorers: [],
         lineups: null,
         source: "fallback-live-safe",
