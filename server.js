@@ -95,8 +95,10 @@ function canonicalTeam(value) {
 }
 
 function scoreObject(match) {
-  const homeScore = Number.isFinite(Number(match?.homeScore)) ? Number(match.homeScore) : null;
-  const awayScore = Number.isFinite(Number(match?.awayScore)) ? Number(match.awayScore) : null;
+  const rawHome = match?.homeScore;
+  const rawAway = match?.awayScore;
+  const homeScore = rawHome !== null && rawHome !== undefined && rawHome !== "" && Number.isFinite(Number(rawHome)) ? Number(rawHome) : null;
+  const awayScore = rawAway !== null && rawAway !== undefined && rawAway !== "" && Number.isFinite(Number(rawAway)) ? Number(rawAway) : null;
   if (homeScore === null || awayScore === null) return null;
   return { home: homeScore, away: awayScore };
 }
