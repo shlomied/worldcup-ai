@@ -1,555 +1,382 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+const http = require("http");
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = Number(process.env.PORT || 3000);
+const ZAFRONIX_API_KEY = process.env.ZAFRONIX_API_KEY || "zwc_free_45308debec8cda31b56c4036";
+const ZAFRONIX_BASE = "https://api.zafronix.com/fifa/worldcup/v1";
+const WORLD_CUP_YEAR = process.env.ZAFRONIX_WORLD_CUP_YEAR || "2026";
+const CHAMPION = process.env.DAVE_CHAMPION || "France";
 
-const PORT = process.env.PORT || 3000;
+const TEAM_ALIASES = new Map([
+  ["usa", "United States"],
+  ["u.s.a.", "United States"],
+  ["united states", "United States"],
+  ["south korea", "Korea Republic"],
+  ["korea republic", "Korea Republic"],
+  ["czech republic", "Czechia"],
+  ["czechia", "Czechia"],
+  ["ivory coast", "Cote d'Ivoire"],
+  ["cote d'ivoire", "Cote d'Ivoire"],
+]);
 
-const TEAM_POWER = {
-  Brazil: {
-    elo: 92,
-    attack: 95,
-    defense: 84,
-    midfield: 88,
-    form: 91,
-    experience: 94,
-    squadDepth: 94,
-    starPower: 93,
-    injuryPenalty: 8,
-  },
-  Argentina: {
-    elo: 94,
-    attack: 90,
-    defense: 86,
-    midfield: 90,
-    form: 88,
-    experience: 95,
-    squadDepth: 88,
-    starPower: 91,
-    injuryPenalty: 10,
-  },
-  France: {
-    elo: 95,
-    attack: 96,
-    defense: 88,
-    midfield: 91,
-    form: 90,
-    experience: 90,
-    squadDepth: 96,
-    starPower: 96,
-    injuryPenalty: 7,
-  },
-  England: {
-    elo: 91,
-    attack: 90,
-    defense: 86,
-    midfield: 92,
-    form: 88,
-    experience: 86,
-    squadDepth: 90,
-    starPower: 91,
-    injuryPenalty: 9,
-  },
-  Spain: {
-    elo: 90,
-    attack: 88,
-    defense: 87,
-    midfield: 94,
-    form: 90,
-    experience: 84,
-    squadDepth: 89,
-    starPower: 87,
-    injuryPenalty: 8,
-  },
-  Germany: {
-    elo: 89,
-    attack: 88,
-    defense: 84,
-    midfield: 90,
-    form: 86,
-    experience: 88,
-    squadDepth: 90,
-    starPower: 86,
-    injuryPenalty: 8,
-  },
-  Portugal: {
-    elo: 90,
-    attack: 91,
-    defense: 84,
-    midfield: 89,
-    form: 87,
-    experience: 91,
-    squadDepth: 88,
-    starPower: 90,
-    injuryPenalty: 9,
-  },
-  Netherlands: {
-    elo: 88,
-    attack: 85,
-    defense: 89,
-    midfield: 86,
-    form: 86,
-    experience: 86,
-    squadDepth: 84,
-    starPower: 84,
-    injuryPenalty: 8,
-  },
-  Mexico: {
-    elo: 80,
-    attack: 76,
-    defense: 78,
-    midfield: 79,
-    form: 78,
-    experience: 82,
-    squadDepth: 76,
-    starPower: 75,
-    injuryPenalty: 8,
-  },
-  "United States": {
-    elo: 82,
-    attack: 80,
-    defense: 78,
-    midfield: 82,
-    form: 80,
-    experience: 78,
-    squadDepth: 81,
-    starPower: 80,
-    injuryPenalty: 8,
-  },
-  Canada: {
-    elo: 78,
-    attack: 80,
-    defense: 74,
-    midfield: 76,
-    form: 77,
-    experience: 74,
-    squadDepth: 75,
-    starPower: 82,
-    injuryPenalty: 8,
-  },
+const RANKINGS = {
+  Argentina: 1886,
+  France: 1859,
+  Spain: 1848,
+  England: 1813,
+  Brazil: 1776,
+  Portugal: 1770,
+  Netherlands: 1752,
+  Belgium: 1736,
+  Germany: 1716,
+  Croatia: 1698,
+  Italy: 1689,
+  Uruguay: 1677,
+  Colombia: 1669,
+  Morocco: 1668,
+  Mexico: 1650,
+  "United States": 1644,
+  Switzerland: 1620,
+  Denmark: 1616,
+  Japan: 1612,
+  Senegal: 1605,
+  "Korea Republic": 1585,
+  Iran: 1565,
+  Australia: 1544,
+  Canada: 1518,
+  Serbia: 1514,
+  Sweden: 1510,
+  Norway: 1508,
+  Poland: 1503,
+  Ecuador: 1498,
+  Austria: 1492,
+  Turkey: 1488,
+  Tunisia: 1482,
+  Egypt: 1478,
+  Nigeria: 1474,
+  Algeria: 1468,
+  Ghana: 1456,
+  Cameroon: 1450,
+  Paraguay: 1445,
+  Chile: 1438,
+  "South Africa": 1428,
+  "Saudi Arabia": 1424,
+  Qatar: 1408,
 };
 
-function normalizeTeamName(name = "") {
-  const raw = String(name).trim();
-  const n = raw.toLowerCase();
-
-  if (!raw) return null;
-
-  if (n.includes("brazil")) return "Brazil";
-  if (n.includes("argentina")) return "Argentina";
-  if (n.includes("france")) return "France";
-  if (n.includes("england")) return "England";
-  if (n.includes("spain")) return "Spain";
-  if (n.includes("germany")) return "Germany";
-  if (n.includes("portugal")) return "Portugal";
-  if (n.includes("netherlands") || n.includes("holland")) return "Netherlands";
-  if (n.includes("mexico")) return "Mexico";
-  if (n.includes("united states") || n === "usa" || n.includes("u.s.a")) return "United States";
-  if (n.includes("canada")) return "Canada";
-  if (n.includes("italy")) return "Italy";
-  if (n.includes("uruguay")) return "Uruguay";
-  if (n.includes("belgium")) return "Belgium";
-  if (n.includes("croatia")) return "Croatia";
-  if (n.includes("morocco")) return "Morocco";
-  if (n.includes("japan")) return "Japan";
-  if (n.includes("korea")) return "South Korea";
-  if (n.includes("australia")) return "Australia";
-  if (n.includes("switzerland")) return "Switzerland";
-  if (n.includes("denmark")) return "Denmark";
-  if (n.includes("poland")) return "Poland";
-  if (n.includes("qatar")) return "Qatar";
-  if (n.includes("saudi")) return "Saudi Arabia";
-
-  return raw;
+function json(res, status, body) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,OPTIONS",
+    "access-control-allow-headers": "content-type",
+  });
+  res.end(JSON.stringify(body));
 }
 
-function addDays(date, days) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+function cleanName(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function toDateOnly(date) {
-  return date.toISOString().slice(0, 10);
+function cleanScorerName(value) {
+  return cleanName(value)
+    .replace(/\s+\d{1,3}(?:\+\d+)?'\s*(?:pen)?$/i, "")
+    .replace(/\s+(?:pen|penalty)$/i, "")
+    .replace(/\s+\d{1,3}(?:\+\d+)?\s*(?:pen)?$/i, "")
+    .trim();
 }
 
-async function fetchFootballDataJson(url) {
-  const token = process.env.FOOTBALL_DATA_KEY;
-
-  if (!token) {
-    return { ok: false, data: null, error: "Missing FOOTBALL_DATA_KEY" };
-  }
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "X-Auth-Token": token,
-      },
-    });
-
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        data,
-        error: `Football-Data error ${response.status}`,
-      };
-    }
-
-    return { ok: true, data, error: null };
-  } catch (error) {
-    return { ok: false, data: null, error: error.message };
-  }
+function isOwnGoal(value) {
+  return /\bo\.?g\.?\b|own goal/i.test(String(value || ""));
 }
 
-async function fetchOddsJson(url) {
-  const key = process.env.ODDS_API_KEY;
-
-  if (!key) {
-    return { ok: false, data: null, error: "Missing ODDS_API_KEY" };
-  }
-
-  try {
-    const fullUrl = url.includes("?") ? `${url}&apiKey=${key}` : `${url}?apiKey=${key}`;
-    const response = await fetch(fullUrl);
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        data,
-        error: `Odds API error ${response.status}`,
-      };
-    }
-
-    return { ok: true, data, error: null };
-  } catch (error) {
-    return { ok: false, data: null, error: error.message };
-  }
+function canonicalTeam(value) {
+  const name = cleanName(value);
+  return TEAM_ALIASES.get(name.toLowerCase()) || name;
 }
 
-function normalizeMatch(m, fallbackLeague = "Football") {
-  const homeRaw = m.homeTeam?.name || m.homeTeam?.shortName || "";
-  const awayRaw = m.awayTeam?.name || m.awayTeam?.shortName || "";
+function scoreObject(match) {
+  const homeScore = Number.isFinite(Number(match?.homeScore)) ? Number(match.homeScore) : null;
+  const awayScore = Number.isFinite(Number(match?.awayScore)) ? Number(match.awayScore) : null;
+  if (homeScore === null || awayScore === null) return null;
+  return { home: homeScore, away: awayScore };
+}
 
-  const home = normalizeTeamName(homeRaw);
-  const away = normalizeTeamName(awayRaw);
+function matchStatus(match) {
+  const score = scoreObject(match);
+  const kickoff = match?.kickoffUtc ? new Date(match.kickoffUtc).getTime() : NaN;
+  if (score && Number.isFinite(kickoff) && kickoff < Date.now() - 90 * 60 * 1000) return "FINISHED";
+  if (Number.isFinite(kickoff) && kickoff <= Date.now() && kickoff > Date.now() - 130 * 60 * 1000) return "IN_PLAY";
+  return "TIMED";
+}
 
-  if (!home || !away) return null;
+function normalizeMatch(match) {
+  const score = scoreObject(match);
+  const home = canonicalTeam(match?.homeTeam || match?.home);
+  const away = canonicalTeam(match?.awayTeam || match?.away);
 
   return {
-    id: m.id,
+    id: match?.id || match?.matchNo,
+    matchNo: match?.matchNo || null,
     home,
     away,
-    time: m.utcDate,
-    league: m.competition?.name || fallbackLeague || "Football",
-    status: m.status || "SCHEDULED",
-    source: "football-data",
+    time: match?.kickoffUtc || match?.date || null,
+    league: "FIFA World Cup 2026",
+    round: match?.stageNormalized || match?.stage || null,
+    stadium: match?.stadium || null,
+    city: match?.city || null,
+    status: matchStatus(match),
+    homeScore: score ? score.home : undefined,
+    awayScore: score ? score.away : undefined,
+    score: score || undefined,
+    scorers: Array.isArray(match?.goals) ? match.goals : [],
+    lineups: match?.lineups || null,
+    source: "zafronix",
   };
 }
 
-async function getRealMatches() {
-  const today = new Date();
-  const dateFrom = toDateOnly(today);
-  const dateTo = toDateOnly(addDays(today, 30));
+async function zafronix(path) {
+  if (!ZAFRONIX_API_KEY) throw new Error("Missing ZAFRONIX_API_KEY");
 
-  const urls = [
-    `https://api.football-data.org/v4/matches?dateFrom=${dateFrom}&dateTo=${dateTo}`,
-    `https://api.football-data.org/v4/competitions/WC/matches?dateFrom=${dateFrom}&dateTo=${dateTo}&season=2026`,
-  ];
-
-  let allMatches = [];
-
-  for (const url of urls) {
-    const result = await fetchFootballDataJson(url);
-
-    if (!result.ok) {
-      console.log("Football-Data matches source failed:", result.error, result.data);
-      continue;
-    }
-
-    const matches = Array.isArray(result.data?.matches) ? result.data.matches : [];
-    const fallbackLeague = result.data?.competition?.name || "Football";
-
-    const normalized = matches
-      .map((m) => normalizeMatch(m, fallbackLeague))
-      .filter(Boolean)
-      .filter((m) => {
-        const allowed = ["SCHEDULED", "TIMED", "IN_PLAY", "LIVE", "PAUSED"];
-        return allowed.includes(m.status);
-      });
-
-    allMatches = [...allMatches, ...normalized];
+  const response = await fetch(`${ZAFRONIX_BASE}${path}`, {
+    headers: { "X-API-Key": ZAFRONIX_API_KEY },
+  });
+  const text = await response.text();
+  let body;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
   }
 
-  const unique = [];
-  const seen = new Set();
+  if (!response.ok) {
+    throw new Error(`Zafronix ${response.status}: ${JSON.stringify(body).slice(0, 400)}`);
+  }
 
-  for (const match of allMatches) {
-    const key = `${match.id || ""}-${match.home}-${match.away}-${match.time}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(match);
+  return body;
+}
+
+async function getMatches() {
+  const body = await zafronix(`/matches?year=${encodeURIComponent(WORLD_CUP_YEAR)}`);
+  const data = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+  return data.map(normalizeMatch).filter((item) => item.home && item.away);
+}
+
+function topScorersFromMatches(matches) {
+  const table = new Map();
+
+  for (const match of matches) {
+    for (const goal of match.scorers || []) {
+      if (isOwnGoal(goal?.scorer || goal?.player || goal?.name)) continue;
+      const scorer = cleanScorerName(goal?.scorer || goal?.player || goal?.name);
+      if (!scorer) continue;
+      const side = String(goal?.team || "").toLowerCase();
+      const team = side === "home" ? match.home : side === "away" ? match.away : cleanName(goal?.team);
+      const key = `${scorer}|${team}`;
+      const current = table.get(key) || { name: scorer, team, goals: 0, predictedGoals: 0, source: "zafronix-goals" };
+      current.goals += 1;
+      current.predictedGoals = current.goals;
+      table.set(key, current);
     }
   }
 
-  unique.sort((a, b) => new Date(a.time) - new Date(b.time));
-  return unique;
+  return [...table.values()].sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 20);
 }
 
-function defaultPower(team) {
-  const seed = String(team || "")
-    .split("")
-    .reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+function scorerGoalMap(matches) {
+  const map = new Map();
+  for (const scorer of topScorersFromMatches(matches)) {
+    map.set(`${scorer.name.toLowerCase()}|${canonicalTeam(scorer.team).toLowerCase()}`, scorer.goals);
+    map.set(scorer.name.toLowerCase(), Math.max(map.get(scorer.name.toLowerCase()) || 0, scorer.goals));
+  }
+  return map;
+}
 
-  const base = 72 + (seed % 12);
+function playerGoalsFromMap(playerName, teamName, goals) {
+  const name = cleanName(playerName).toLowerCase();
+  const team = canonicalTeam(teamName).toLowerCase();
+  const direct = goals.get(`${name}|${team}`) || goals.get(name);
+  if (direct) return direct;
+
+  let best = 0;
+  for (const [key, value] of goals.entries()) {
+    if (!key.includes("|")) continue;
+    const [scorer, scorerTeam] = key.split("|");
+    if (scorerTeam !== team) continue;
+    if (name.endsWith(scorer) || scorer.endsWith(name)) best = Math.max(best, value);
+  }
+  return best;
+}
+
+async function getRoster(teamName) {
+  const team = encodeURIComponent(canonicalTeam(teamName));
+  const body = await zafronix(`/teams/${team}/roster?year=${encodeURIComponent(WORLD_CUP_YEAR)}`);
+  return Array.isArray(body) ? body : [];
+}
+
+async function getKeyPlayers(teamName) {
+  const team = canonicalTeam(teamName);
+  const matches = await getMatches();
+  const goals = scorerGoalMap(matches);
+  const roster = await getRoster(teamName);
+  return roster
+    .map((player) => {
+      const name = cleanName(player.name);
+      const currentGoals = playerGoalsFromMap(name, team, goals) || Number(player.goals || 0);
+      return {
+        id: `${team}-${player.jersey || player.name}`,
+        name,
+        role: player.position || "שחקן מפתח",
+        impact: Math.min(96, 72 + Number(currentGoals || 0) * 6 + (player.captain ? 7 : 0) + (player.starter ? 5 : 0)),
+        goals: Number(currentGoals || 0),
+        assists: Number(player.assists || 0),
+        team,
+        image: null,
+        source: "zafronix-roster-and-goals",
+      };
+    })
+    .filter((player) => player.name)
+    .sort((a, b) => b.goals - a.goals || b.impact - a.impact)
+    .slice(0, 4);
+}
+
+function teamStrength(teamName, matches) {
+  const team = canonicalTeam(teamName);
+  const base = RANKINGS[team] || 1450;
+  let points = 0;
+  let played = 0;
+  let goalDiff = 0;
+
+  for (const match of matches) {
+    const score = match.score;
+    if (!score || (match.home !== team && match.away !== team)) continue;
+    const isHome = match.home === team;
+    const goalsFor = isHome ? score.home : score.away;
+    const goalsAgainst = isHome ? score.away : score.home;
+    points += goalsFor === goalsAgainst ? 1 : goalsFor > goalsAgainst ? 3 : 0;
+    goalDiff += goalsFor - goalsAgainst;
+    played += 1;
+  }
 
   return {
-    elo: base,
-    attack: base,
-    defense: base - 2,
-    midfield: base - 1,
-    form: base - 3,
-    experience: base - 1,
-    squadDepth: base - 4,
-    starPower: base - 2,
-    injuryPenalty: 9,
+    base,
+    played,
+    form: points * 18 + goalDiff * 8,
+    total: base + points * 18 + goalDiff * 8,
   };
 }
 
-function scoreFromBreakdown(b) {
-  const raw =
-    b.elo * 0.18 +
-    b.attack * 0.18 +
-    b.defense * 0.14 +
-    b.midfield * 0.14 +
-    b.form * 0.14 +
-    b.experience * 0.08 +
-    b.squadDepth * 0.08 +
-    b.starPower * 0.06 -
-    b.injuryPenalty * 0.2;
-
-  return Number(raw.toFixed(2));
+function expectedScore(homeStrength, awayStrength) {
+  const gap = homeStrength.total - awayStrength.total;
+  if (Math.abs(gap) < 30) return "1-1";
+  if (gap > 150) return "2-0";
+  if (gap > 70) return "2-1";
+  if (gap < -150) return "0-2";
+  if (gap < -70) return "1-2";
+  return gap >= 0 ? "1-0" : "0-1";
 }
 
-function getTeamPower(team) {
-  const breakdown = TEAM_POWER[team] || defaultPower(team);
-  const score = scoreFromBreakdown(breakdown);
-
-  return {
-    score,
-    breakdown,
-    adjustedScore: score,
-  };
-}
-
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function round2(n) {
-  return Number(n.toFixed(2));
-}
-
-function calculatePrediction(home, away) {
-  const homePower = getTeamPower(home);
-  const awayPower = getTeamPower(away);
-
-  homePower.adjustedScore = round2(homePower.score + 1);
-  awayPower.adjustedScore = round2(awayPower.score + 0.5);
-
-  const diff = homePower.adjustedScore - awayPower.adjustedScore;
-
-  const draw = clamp(0.31 - Math.abs(diff) * 0.012, 0.18, 0.31);
+async function seededPrediction(homeInput, awayInput) {
+  const matches = await getMatches();
+  const home = canonicalTeam(homeInput);
+  const away = canonicalTeam(awayInput);
+  const homePower = teamStrength(home, matches);
+  const awayPower = teamStrength(away, matches);
+  const gap = homePower.total - awayPower.total;
+  const favorite = gap >= 0 ? home : away;
+  const underdog = gap >= 0 ? away : home;
+  const confidence = Math.min(0.84, Math.max(0.51, 0.54 + Math.abs(gap) / 1000));
+  const draw = Math.max(0.18, 0.3 - Math.abs(gap) / 1800);
   const remaining = 1 - draw;
-
-  const homeShare = 1 / (1 + Math.exp(-diff / 7));
-  const homeWin = clamp(remaining * homeShare, 0.05, 0.9);
-  const awayWin = clamp(remaining - homeWin, 0.05, 0.9);
-
-  const total = homeWin + draw + awayWin;
-
-  const normalizedHome = homeWin / total;
-  const normalizedDraw = draw / total;
-  const normalizedAway = awayWin / total;
-
-  const favorite = normalizedHome >= normalizedAway ? home : away;
-  const underdog = normalizedHome >= normalizedAway ? away : home;
-  const confidence = Math.max(normalizedHome, normalizedAway);
-
-  const homeGoals = clamp(Math.round(1.2 + homePower.adjustedScore / 55 + diff / 18), 0, 5);
-  const awayGoals = clamp(Math.round(1.1 + awayPower.adjustedScore / 58 - diff / 18), 0, 5);
-
-  const reasons = [];
-
-  if (homePower.breakdown.attack > awayPower.breakdown.attack) {
-    reasons.push(`${home} עדיפה בהתקפה`);
-  } else if (awayPower.breakdown.attack > homePower.breakdown.attack) {
-    reasons.push(`${away} עדיפה בהתקפה`);
-  }
-
-  if (homePower.breakdown.form > awayPower.breakdown.form) {
-    reasons.push(`${home} מגיעה בכושר טוב יותר`);
-  } else if (awayPower.breakdown.form > homePower.breakdown.form) {
-    reasons.push(`${away} מגיעה בכושר טוב יותר`);
-  }
-
-  if (homePower.breakdown.starPower > awayPower.breakdown.starPower) {
-    reasons.push(`${home} נהנית מיותר שחקני הכרעה`);
-  } else if (awayPower.breakdown.starPower > homePower.breakdown.starPower) {
-    reasons.push(`${away} נהנית מיותר שחקני הכרעה`);
-  }
-
-  if (reasons.length === 0) {
-    reasons.push("המשחק מאוזן מאוד לפי מדדי דייב");
-  }
+  const homeWin = gap >= 0 ? remaining * confidence : remaining * (1 - confidence);
+  const awayWin = remaining - homeWin;
 
   return {
     home,
     away,
-    homeWin: round2(normalizedHome),
-    draw: round2(normalizedDraw),
-    awayWin: round2(normalizedAway),
-    expectedScore: `${homeGoals}-${awayGoals}`,
+    homeWin,
+    draw,
+    awayWin,
+    expectedScore: expectedScore(homePower, awayPower),
     favorite,
     underdog,
-    confidence: round2(confidence),
+    confidence,
     power: {
-      [home]: homePower,
-      [away]: awayPower,
-    },
-    liveSignals: {
-      footballData: {
-        active: Boolean(process.env.FOOTBALL_DATA_KEY),
-        note: process.env.FOOTBALL_DATA_KEY
-          ? "Football-Data key exists. Match source connected."
-          : "Football-Data key missing.",
+      [home]: {
+        score: Math.round(homePower.base / 20),
+        adjustedScore: Math.round(homePower.total / 20),
+        breakdown: {
+          "דירוג בסיס": Math.round(homePower.base / 20),
+          "כושר במונדיאל": homePower.form,
+          "משחקים ששוחקו": homePower.played,
+        },
       },
-      odds: {
-        active: Boolean(process.env.ODDS_API_KEY),
-        note: process.env.ODDS_API_KEY
-          ? "Odds API key exists. Market source connected."
-          : "Odds API key missing.",
+      [away]: {
+        score: Math.round(awayPower.base / 20),
+        adjustedScore: Math.round(awayPower.total / 20),
+        breakdown: {
+          "דירוג בסיס": Math.round(awayPower.base / 20),
+          "כושר במונדיאל": awayPower.form,
+          "משחקים ששוחקו": awayPower.played,
+        },
       },
     },
-    sourceWeights: {
-      internalAiScore: 0.7,
-      footballData: process.env.FOOTBALL_DATA_KEY ? 0.15 : 0,
-      oddsMarket: process.env.ODDS_API_KEY ? 0.15 : 0,
-    },
-    liveSourcesUsed: [
-      "internal-ai-score",
-      process.env.FOOTBALL_DATA_KEY ? "football-data" : null,
-      process.env.ODDS_API_KEY ? "odds-api" : null,
-    ].filter(Boolean),
+    liveSourcesUsed: ["zafronix-matches", "zafronix-rosters", "local-form"],
     explanation: {
-      summary: `${favorite} מקבלת יתרון לפי דייב מול ${underdog}.`,
-      reasons,
+      summary: `${favorite} מקבלת יתרון לפי דייב.`,
+      reasons: [
+        "דייב משקלל תוצאות שכבר קיימות במקור הנתונים",
+        "פער איכות בסיסי מתוקן לפי כושר נוכחי בטורניר",
+        "דיוק הניחושים נמדד מול תוצאה רשמית כשהיא קיימת",
+      ],
     },
   };
 }
 
-async function testFootballData() {
-  const result = await fetchFootballDataJson("https://api.football-data.org/v4/competitions");
-  return {
-    keyExists: Boolean(process.env.FOOTBALL_DATA_KEY),
-    active: result.ok,
-    error: result.ok ? null : result.error,
-    competitions: Array.isArray(result.data?.competitions) ? result.data.competitions.length : 0,
-  };
-}
+async function route(req, res) {
+  if (req.method === "OPTIONS") return json(res, 200, { ok: true });
 
-async function testOddsApi() {
-  const result = await fetchOddsJson("https://api.the-odds-api.com/v4/sports/");
-  return {
-    keyExists: Boolean(process.env.ODDS_API_KEY),
-    active: result.ok,
-    error: result.ok ? null : result.error,
-    sports: Array.isArray(result.data) ? result.data.length : 0,
-  };
-}
-
-app.get("/", (req, res) => {
-  res.json({
-    ok: true,
-    name: "worldcup-ai",
-    mode: "DAVE_AI_LIVE_ONLY",
-    endpoints: ["/status", "/matches", "/predict/:home/:away", "/top-scorer", "/champion"],
-  });
-});
-
-app.get("/status", async (req, res) => {
-  const [footballData, oddsApi] = await Promise.all([testFootballData(), testOddsApi()]);
-
-  res.json({
-    server: true,
-    mode: "DAVE_AI_LIVE_ONLY",
-    keys: {
-      footballData: Boolean(process.env.FOOTBALL_DATA_KEY),
-      oddsApi: Boolean(process.env.ODDS_API_KEY),
-    },
-    sources: {
-      footballData,
-      oddsApi,
-    },
-  });
-});
-
-app.get("/matches", async (req, res) => {
   try {
-    const matches = await getRealMatches();
-    res.json(matches);
+    const url = new URL(req.url, `http://${req.headers.host}`);
+
+    if (url.pathname === "/" || url.pathname === "/status") {
+      return json(res, 200, {
+        server: true,
+        mode: "DAVE_AI_ZAFRONIX",
+        keys: { zafronix: !!ZAFRONIX_API_KEY },
+        zafronix: { year: WORLD_CUP_YEAR },
+        endpoints: ["/status", "/matches", "/predict/:home/:away", "/top-scorer", "/champion", "/key-players/:team"],
+      });
+    }
+
+    if (url.pathname === "/matches") return json(res, 200, await getMatches());
+    if (url.pathname === "/top-scorer") return json(res, 200, topScorersFromMatches(await getMatches()));
+    if (url.pathname === "/champion") return json(res, 200, { champion: CHAMPION, source: "zafronix-config" });
+
+    const keyPlayersMatch = url.pathname.match(/^\/key-players\/([^/]+)$/);
+    if (keyPlayersMatch) return json(res, 200, await getKeyPlayers(decodeURIComponent(keyPlayersMatch[1])));
+
+    const predictMatch = url.pathname.match(/^\/predict\/([^/]+)\/([^/]+)$/);
+    if (predictMatch) {
+      return json(res, 200, await seededPrediction(decodeURIComponent(predictMatch[1]), decodeURIComponent(predictMatch[2])));
+    }
+
+    return json(res, 404, { error: "Not found" });
   } catch (error) {
-    console.error("GET /matches failed:", error);
-    res.json([]);
+    return json(res, 500, { error: error.message });
   }
-});
+}
 
-app.get("/predict/:home/:away", async (req, res) => {
-  const home = normalizeTeamName(req.params.home) || req.params.home;
-  const away = normalizeTeamName(req.params.away) || req.params.away;
-
-  const prediction = calculatePrediction(home, away);
-  res.json(prediction);
-});
-
-app.get("/top-scorer", (req, res) => {
-  res.json([
-    {
-      name: "Kylian Mbappé",
-      goals: 0,
-      predictedGoals: 6,
-      team: "France",
-      image: "https://media.api-sports.io/football/players/278.png",
-    },
-    {
-      name: "Harry Kane",
-      goals: 0,
-      predictedGoals: 5,
-      team: "England",
-      image: "https://media.api-sports.io/football/players/184.png",
-    },
-    {
-      name: "Vinicius Jr",
-      goals: 0,
-      predictedGoals: 5,
-      team: "Brazil",
-      image: "https://media.api-sports.io/football/players/762.png",
-    },
-  ]);
-});
-
-app.get("/champion", (req, res) => {
-  res.json({
-    champion: "France",
-    source: "dave-ai-internal",
+if (require.main === module) {
+  http.createServer(route).listen(PORT, () => {
+    console.log(`worldcup-ai Zafronix server listening on ${PORT}`);
   });
-});
+}
 
-app.listen(PORT, () => {
-  console.log(`Dave AI server running on port ${PORT}`);
-});
+module.exports = {
+  normalizeMatch,
+  topScorersFromMatches,
+  seededPrediction,
+  teamStrength,
+  getMatches,
+  getKeyPlayers,
+};
