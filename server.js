@@ -111,8 +111,8 @@ function matchStatus(match) {
 
 function normalizeMatch(match) {
   const score = scoreObject(match);
-  const home = canonicalTeam(match?.homeTeam || match?.home);
-  const away = canonicalTeam(match?.awayTeam || match?.away);
+  const home = canonicalTeam(match?.homeTeam || match?.home || match?.homeRef || match?.homeSeed);
+  const away = canonicalTeam(match?.awayTeam || match?.away || match?.awayRef || match?.awaySeed);
 
   return {
     id: match?.id || match?.matchNo,
